@@ -1,115 +1,28 @@
-import config from "dotenv/config.js";
+import { authenticateUser } from './services/auth.js'
+import { fetchClients, fetchStatuses } from './services/client.js'
+import { exportToGoogleSheet } from './services/googleSheet.js'
+import { handleError } from './helpers/error.js'
+import getEnv from './helpers/getEnv.js'
 
-require('dotenv').config();
-const axios = require('axios');
-const { google } = require('googleapis');
 
-
-
-const API_BASE_URL = process.env.API_BASE_URL;
-
-// Регистрация нового пользователя
-async function registerUser(username) {
-    const response = await axios.post(`${API_BASE_URL}/auth/registration`, { username });
-    console.log('Пользователь зарегистрирован:', response.data);
-}
-
-// Авторизация и получение токена
-async function loginUser(username) {
-    const response = await axios.post(`${API_BASE_URL}/auth/login`, { username });
-    return response.data.token;
-}
-
-// Получение списка клиентов
-async function fetchClients(token, limit = 100, offset = 0) {
-    const response = await axios.get(`${API_BASE_URL}/clients`, {
-        headers: { Authorization: token },
-        params: { limit, offset },
-    });
-    return response.data;
-}
-
-// Получение статусов клиентов
-async function fetchStatuses(token, userIds) {
-    const response = await axios.post(
-        `${API_BASE_URL}/clients`,
-        { userIds },
-        { headers: { Authorization: token } }
-    );
-    return response.data;
-}
-
-// Экспорт данных в Google Таблицу
-async function exportToGoogleSheet(data) {
-    const auth = new google.auth.GoogleAuth({
-        keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
-
-    const sheets = google.sheets({ version: 'v4', auth });
-
-    const rows = data.map(client => [
-        client.id,
-        client.firstName,
-        client.lastName,
-        client.gender,
-        client.address,
-        client.city,
-        client.phone,
-        client.email,
-        client.status,
-    ]);
-
-    await sheets.spreadsheets.values.update({
-        spreadsheetId: process.env.GOOGLE_SHEET_ID,
-        range: 'Sheet1!A1',
-        valueInputOption: 'RAW',
-        requestBody: {
-            values: [['ID', 'First Name', 'Last Name', 'Gender', 'Address', 'City', 'Phone', 'Email', 'Status'], ...rows],
-        },
-    });
-
-    console.log('Данные успешно экспортированы в Google Таблицу.');
-}
-
-// Основная функция
 (async () => {
     try {
-        const username = `user_${Date.now()}`; // Уникальное имя пользователя
-        await registerUser(username);
+        const USERNAME = getEnv('USERNAME')
 
-        const token = await loginUser(username);
-        console.log('Получен токен:', token);
+        const token = await authenticateUser(USERNAME)
 
-        const limit = 100; // Максимальное количество записей за раз
-        let offset = 0;
-        let allClients = [];
+        const clients = await fetchClients(token)
 
-        // Загружаем данные с сервера по частям
-        while (true) {
-            const clients = await fetchClients(token, limit, offset);
-            if (clients.length === 0) break;
+        const userIds = clients.map(client => client.id)
+        const statuses = await fetchStatuses(token, userIds)
 
-            allClients = allClients.concat(clients);
-            offset += limit;
-        }
-
-        console.log(`Загружено клиентов: ${allClients.length}`);
-
-        // Получение статусов для всех клиентов
-        const userIds = allClients.map(client => client.id);
-        const statuses = await fetchStatuses(token, userIds);
-
-        // Объединяем данные клиентов со статусами
-        const data = allClients.map(client => ({
+        const clientData = clients.map(client => ({
             ...client,
-            status: statuses.find(status => status.userId === client.id)?.status || 'Unknown',
-        }));
+            status: statuses.find(status => status.id === client.id)?.status || 'Unknown',
+        }))
 
-        // Экспорт в Google Таблицу
-        await exportToGoogleSheet(data);
-
+        await exportToGoogleSheet(clientData)
     } catch (error) {
-        console.error('Ошибка:', error.message);
+        handleError(error)
     }
-})();
+})()
