@@ -9,14 +9,12 @@ const API_URL = getEnv("API_URL")
  * 1. Если регистрация успешна, возвращает токен из регистрации.
  * 2. Если пользователь существует, выполняет логин.
  */
-export const fetchClients = async (token) => {
-    let LIMIT = getEnv('LIMIT', 10)
-    let OFFSET = getEnv('OFFSET', 0)
+export const fetchClients = async (token, limit, offset) => {
     const response = await axios.get(`${API_URL}/clients`, {
         headers: { Authorization: token },
         params: {
-            limit: LIMIT,
-            offset: OFFSET
+            limit,
+            offset
         },
     })
     return response.data

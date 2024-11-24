@@ -14,5 +14,6 @@ npm run start
 ```
 
 В env переменных: 
+- LIMIT - Количество персон в батче при обработке;
 - GOOGLE_SERVICE_ACCOUNT_KEY - JSON файл с ключом для доступа к таблице, инструкция - https://docs.edna.ru/kb/get-service-json/;
 - SHEET_ID - идентификатор таблицы в URL гугл таблицы после `spreadsheets/d/`.
